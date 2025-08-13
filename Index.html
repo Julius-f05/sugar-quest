@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Sugar Quest – A Day in the Life</title>
+<meta name="description" content="Interactive 2D-style glucose game — single-file HTML that runs on any browser (macOS/Windows/Linux/ChromeOS/iOS/Android).">
+<style>
+  :root{
+    --bg1:#fff5f5; --bg2:#f0f9ff; --card:#ffffff; --ink:#0f172a; --muted:#475569;
+    --ok:#16a34a; --warn:#f59e0b; --bad:#dc2626; --soft:#e2e8f0;
+    --shadow:0 6px 20px rgba(2,8,23,.08);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Helvetica,Arial,sans-serif;background:linear-gradient(180deg,var(--bg1),var(--bg2));color:var(--ink)}
+  .wrap{max-width:1100px;margin:0 auto;padding:24px}
+  h1{font-size:clamp(22px,3vw,32px);margin:0 0 12px;font-weight:800}
+  .row{display:grid;grid-template-columns:repeat(12,1fr);gap:16px}
+  .card{background:var(--card);border:1px solid #e5e7eb;border-radius:18px;padding:16px;box-shadow:var(--shadow)}
+  .btn{cursor:pointer;border-radius:16px;border:1px solid #e5e7eb;background:#fff;padding:10px 14px;font-weight:600}
+  .btn:hover{background:#f8fafc}
+  .grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-top:12px}
+  .label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+  .big{font-size:34px;font-weight:800}
+  .meter{height:12px;background:#e5e7eb;border-radius:999px;overflow:hidden}
+  .mfill{height:100%;background:linear-gradient(90deg,#22c55e,#84cc16)}
+  .mini{font-size:12px;color:var(--muted)}
+  .pill{font-size:11px;padding:4px 8px;border-radius:999px;background:#f1f5f9;border:1px solid #e2e8f0;margin-left:auto}
+  .choice{ display:grid; grid-template-columns:46px 1fr; align-items:center; gap:10px; text-align:left; border-radius:16px; border:1px solid #e5e7eb; background:#fff; padding:12px; box-shadow:var(--shadow)}
+  .choice:hover{background:#f8fafc}
+  .food{width:46px;height:46px;border-radius:12px;border:1px solid #e5e7eb;display:grid;place-items:center;background:#fff}
+  .hist{display:flex;flex-wrap:wrap;gap:10px;margin-top:8px}
+  .hitem{border:1px solid #e5e7eb;background:#f8fafc;border-radius:12px;padding:8px 10px;font-size:12px}
+  .status-ok{color:var(--ok)}
+  .status-warn{color:var(--warn)}
+  .status-bad{color:var(--bad)}
+  canvas{width:100%;height:140px;border-radius:12px;border:1px solid #e5e7eb;background:#ffffff}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px">
+      <h1>Sugar Quest: A Day in the Life</h1>
+      <button id="restart" class="btn" title="Restart the day">Restart</button>
+    </header>
+
+    <!-- HUD Row -->
+    <div class="row" style="margin-bottom:12px">
+      <section class="card" style="grid-column:span 4">
+        <div class="label">Blood Glucose</div>
+        <div style="display:flex;align-items:flex-end;gap:10px">
+          <div class="big"><span id="gVal">95</span> <span style="font-size:16px;font-weight:700">mg/dL</span></div>
+        </div>
+        <div class="meter" style="margin-top:10px"><div id="gBar" class="mfill" style="width:25%"></div></div>
+        <div class="mini" style="display:flex;justify-content:space-between;margin-top:4px"><span>&lt;70</span><span>80</span><span>140</span><span>180+</span></div>
+      </section>
+      <section class="card" style="grid-column:span 4">
+        <div class="label">Status</div>
+        <div id="statusTxt" style="font-size:20px;font-weight:700;margin-top:4px">OK</div>
+        <p class="mini">Insulin lowers glucose; glucagon raises it. Aim for 80–140 mg/dL.</p>
+        <div class="label" style="margin-top:8px">Today's Curve</div>
+        <canvas id="chart" width="320" height="100" aria-label="Glucose over time"></canvas>
+      </section>
+      <section class="card" style="grid-column:span 4">
+        <div class="label">Score</div>
+        <div class="big" id="score">0</div>
+        <p class="mini">Points for keeping levels in range and reducing insulin demand via smart choices and activity.</p>
+      </section>
+    </div>
+
+    <!-- Event Card -->
+    <section id="eventCard" class="card">
+      <div style="display:flex;align-items:center;gap:8px">
+        <h2 id="eventTitle" style="margin:0;font-size:22px;font-weight:800">Loading…</h2>
+        <span id="eventTag" class="pill">Event</span>
+      </div>
+      <p id="eventPrompt" class="mini" style="margin-top:6px"></p>
+      <div id="choices" class="grid3" style="margin-top:8px"></div>
+    </section>
+
+    <!-- Learn panel -->
+    <section class="card" style="margin-top:14px">
+      <h3 style="margin:0 0 6px;font-size:18px">How it works (physiology)</h3>
+      <ul class="mini" style="margin:6px 0 0 18px">
+        <li>Carbohydrates raise blood glucose; the pancreas secretes <b>insulin</b> to promote uptake and storage.</li>
+        <li>Between meals or exercise, <b>glucagon</b> and catecholamines support hepatic glucose output.</li>
+        <li>Exercise boosts muscle uptake via <b>GLUT4</b>, reducing insulin demand.</li>
+        <li>Fibre/protein/fat slow absorption and flatten spikes.</li>
+        <li>Target ~80–140 mg/dL; avoid &lt;70 (hypo) and persistent &gt;180 (hyper).</li>
+      </ul>
+    </section>
+  </div>
+
+<script>
+(function(){
+  // Inline food SVGs (offline images)
+  const ICONS = {
+    cereal:`<svg viewBox='0 0 64 64' width='28' height='28'><rect x='10' y='16' width='44' height='26' rx='6' fill='#fde68a' stroke='#0f172a'/> <circle cx='20' cy='29' r='3' fill='#ef4444'/><circle cx='28' cy='31' r='3' fill='#84cc16'/><circle cx='36' cy='29' r='3' fill='#06b6d4'/><circle cx='44' cy='31' r='3' fill='#f59e0b'/></svg>`,
+    juice:`<svg viewBox='0 0 64 64' width='28' height='28'><rect x='20' y='10' width='24' height='38' rx='4' fill='#f97316' stroke='#0f172a'/><rect x='20' y='10' width='24' height='10' fill='#fb923c' opacity='.6'/><rect x='30' y='6' width='4' height='8' fill='#0ea5e9'/></svg>`,
+    oats:`<svg viewBox='0 0 64 64' width='28' height='28'><ellipse cx='32' cy='36' rx='20' ry='12' fill='#fef3c7' stroke='#0f172a'/><path d='M12 36a20 12 0 1 0 40 0' fill='none' stroke='#0f172a'/></svg>`,
+    yogurt:`<svg viewBox='0 0 64 64' width='28' height='28'><path d='M18 18h28l-4 28H22z' fill='#93c5fd' stroke='#0f172a'/><rect x='20' y='14' width='24' height='6' fill='#60a5fa' stroke='#0f172a'/></svg>`,
+    berries:`<svg viewBox='0 0 64 64' width='28' height='28'><circle cx='28' cy='36' r='8' fill='#9333ea'/><circle cx='38' cy='30' r='7' fill='#7c3aed'/><circle cx='38' cy='41' r='7' fill='#a855f7'/></svg>`,
+    coffee:`<svg viewBox='0 0 64 64' width='28' height='28'><rect x='18' y='24' width='28' height='16' rx='4' fill='#a16207' stroke='#0f172a'/><circle cx='48' cy='30' r='6' fill='none' stroke='#0f172a'/></svg>`,
+    rice:`<svg viewBox='0 0 64 64' width='28' height='28'><path d='M14 36h36l-4 10H18z' fill='#94a3b8' stroke='#0f172a'/><ellipse cx='32' cy='30' rx='16' ry='8' fill='#e5e7eb' stroke='#0f172a'/></svg>`,
+    soda:`<svg viewBox='0 0 64 64' width='28' height='28'><rect x='24' y='12' width='16' height='40' rx='4' fill='#ef4444' stroke='#0f172a'/><rect x='24' y='12' width='16' height='8' fill='#f87171'/></svg>`,
+    wrap:`<svg viewBox='0 0 64 64' width='28' height='28'><rect x='18' y='18' width='28' height='28' rx='6' fill='#f5f5f4' stroke='#0f172a'/><circle cx='26' cy='28' r='3' fill='#84cc16'/><circle cx='36' cy='34' r='3' fill='#ef4444'/></svg>`,
+    salad:`<svg viewBox='0 0 64 64' width='28' height='28'><ellipse cx='32' cy='38' rx='18' ry='10' fill='#84cc16' stroke='#0f172a'/><circle cx='26' cy='36' r='3' fill='#ef4444'/><circle cx='38' cy='40' r='3' fill='#22c55e'/></svg>`,
+    chicken:`<svg viewBox='0 0 64 64' width='28' height='28'><ellipse cx='34' cy='34' rx='12' ry='8' fill='#fbbf24' stroke='#0f172a'/><circle cx='22' cy='30' r='4' fill='#f59e0b' stroke='#0f172a'/></svg>`,
+    veg:`<svg viewBox='0 0 64 64' width='28' height='28'><rect x='22' y='20' width='20' height='24' rx='6' fill='#22c55e' stroke='#0f172a'/></svg>`,
+    hiit:`<svg viewBox='0 0 64 64' width='28' height='28'><rect x='14' y='28' width='36' height='8' rx='3' fill='#111827'/><rect x='22' y='20' width='4' height='24' fill='#0ea5e9'/><rect x='38' y='20' width='4' height='24' fill='#ef4444'/></svg>`,
+    walk:`<svg viewBox='0 0 64 64' width='28' height='28'><circle cx='22' cy='18' r='6' fill='#1f2937'/><path d='M22 24l6 10 8 4 2 12' stroke='#0f172a' stroke-width='3' fill='none'/></svg>`,
+    choc:`<svg viewBox='0 0 64 64' width='28' height='28'><rect x='18' y='18' width='28' height='28' rx='6' fill='#7c2d12' stroke='#0f172a'/><path d='M18 32h28M32 18v28' stroke='#0f172a'/></svg>`,
+    nuts:`<svg viewBox='0 0 64 64' width='28' height='28'><ellipse cx='28' cy='30' rx='6' ry='9' fill='#92400e'/><ellipse cx='38' cy='34' rx='6' ry='9' fill='#f59e0b'/></svg>`,
+    apple:`<svg viewBox='0 0 64 64' width='28' height='28'><circle cx='32' cy='36' r='12' fill='#ef4444' stroke='#0f172a'/><rect x='30' y='18' width='4' height='8' fill='#14532d'/></svg>`,
+    drinks:`<svg viewBox='0 0 64 64' width='28' height='28'><path d='M20 16h24l-4 30H24z' fill='#38bdf8' stroke='#0f172a'/><rect x='24' y='12' width='16' height='6' fill='#0ea5e9' stroke='#0f172a'/></svg>`,
+    dance:`<svg viewBox='0 0 64 64' width='28' height='28'><circle cx='22' cy='18' r='6' fill='#0f172a'/><path d='M22 24l8 8 8-2 4 16' stroke='#0f172a' stroke-width='3' fill='none'/></svg>`,
+    snack:`<svg viewBox='0 0 64 64' width='28' height='28'><circle cx='32' cy='32' r='10' fill='#f59e0b' stroke='#0f172a'/><circle cx='28' cy='30' r='2' fill='#7c2d12'/><circle cx='36' cy='35' r='2' fill='#7c2d12'/></svg>`,
+    sleep:`<svg viewBox='0 0 64 64' width='28' height='28'><rect x='18' y='28' width='28' height='14' rx='6' fill='#38bdf8' stroke='#0f172a'/><circle cx='26' cy='24' r='4' fill='#0ea5e9'/></svg>`
+  };
+
+  const TAGS = { meal:'Meal', activity:'Activity', stress:'Social', rest:'Rest' };
+
+  const events = [
+    { id:'breakfast', title:'Breakfast at 8:00', tag:TAGS.meal, prompt:'You wake hungry. Pick a breakfast.', choices:[
+      { icon:'cereal', label:'Sugary cereal + juice', deltaGlucose:+45, insulinDemand:30, note:'High GI spikes glucose quickly.', icons:['cereal','juice'] },
+      { icon:'oats', label:'Oats + yogurt + berries', deltaGlucose:+20, insulinDemand:15, note:'Mixed macros slow absorption.', icons:['oats','yogurt','berries'] },
+      { icon:'coffee', label:'Skip (only coffee)', deltaGlucose:-5, insulinDemand:0, note:'Caffeine + fasting may nudge glucagon.', icons:['coffee'] }
+    ]},
+    { id:'class', title:'9:30 Lecture', tag:TAGS.activity, prompt:'Long lecture ahead. What do you do?', choices:[
+      { icon:'coffee', label:'Sip a sweet iced coffee', deltaGlucose:+15, insulinDemand:10, note:'Liquid carbs absorb fast.', icons:['coffee'] },
+      { icon:'wrap', label:'Focus – no snacks', deltaGlucose:0, insulinDemand:0, note:'Stable unless prior spike/crash.', icons:['wrap'] },
+      { icon:'walk', label:'Walk to lecture (10 min brisk)', deltaGlucose:-10, insulinDemand:-5, note:'Muscle uptake via GLUT4.', icons:['walk'] }
+    ]},
+    { id:'lunch', title:'12:30 Lunch', tag:TAGS.meal, prompt:'Pick a lunch.', choices:[
+      { icon:'rice', label:'White rice bowl + soda', deltaGlucose:+40, insulinDemand:25, note:'High carb + sucrose soda spike.', icons:['rice','soda'] },
+      { icon:'wrap', label:'Wholegrain wrap + salad + water', deltaGlucose:+18, insulinDemand:12, note:'Fibre slows glucose rise.', icons:['wrap','salad'] },
+      { icon:'chicken', label:'Protein bowl (chicken + veg)', deltaGlucose:+8, insulinDemand:6, note:'Lower carb, modest response.', icons:['chicken','veg'] }
+    ]},
+    { id:'gym', title:'16:00 Gym', tag:TAGS.activity, prompt:'Afternoon training.', choices:[
+      { icon:'hiit', label:'HIIT 20 min', deltaGlucose:-25, insulinDemand:-15, note:'Acute uptake; catecholamines may transiently raise then drop.', icons:['hiit'] },
+      { icon:'walk', label:'Light walk 30 min', deltaGlucose:-12, insulinDemand:-8, note:'Steady GLUT4-mediated uptake.', icons:['walk'] },
+      { icon:'soda', label:'Skip workout', deltaGlucose:0, insulinDemand:0, note:'No change.', icons:['soda'] }
+    ]},
+    { id:'snack', title:'17:30 Snack', tag:TAGS.meal, prompt:'Pre-dinner snack?', choices:[
+      { icon:'choc', label:'Chocolate bar', deltaGlucose:+22, insulinDemand:15, note:'Fast carbs spike.', icons:['choc'] },
+      { icon:'nuts', label:'Nuts + apple', deltaGlucose:+10, insulinDemand:7, note:'Fat + fibre soften curve.', icons:['nuts','apple'] },
+      { icon:'salad', label:'No snack', deltaGlucose:-5, insulinDemand:-2, note:'May dip if earlier exercise heavy.', icons:['salad'] }
+    ]},
+    { id:'party', title:'20:00 Party', tag:TAGS.stress, prompt:'Evening social – choose.', choices:[
+      { icon:'drinks', label:'Two sugary drinks', deltaGlucose:+28, insulinDemand:18, note:'Alcohol + sugar complicate control.', icons:['drinks'] },
+      { icon:'dance', label:'Sparkling water + dancing', deltaGlucose:-10, insulinDemand:-6, note:'Activity helps uptake.', icons:['dance'] },
+      { icon:'snack', label:'One drink + light snacks', deltaGlucose:+8, insulinDemand:6, note:'Moderation.', icons:['snack'] }
+    ]},
+    { id:'sleep', title:'23:00 Sleep', tag:TAGS.rest, prompt:'Bedtime.', choices:[
+      { icon:'sleep', label:'Sleep now', deltaGlucose:-5, insulinDemand:-2, note:'Overnight basal regulation.', icons:['sleep'] },
+      { icon:'snack', label:'Midnight snack', deltaGlucose:+15, insulinDemand:10, note:'Late carbs delay dip.', icons:['snack'] }
+    ]}
+  ];
+
+  const range = { low:70, high:180, idealLow:80, idealHigh:140 };
+  const clamp=(n,min,max)=>Math.max(min,Math.min(max,n));
+  const pancreas=(g)=>{ if(g>110) return -Math.min(0.2*(g-100),18); if(g<80) return Math.min(0.25*(80-g),20); return 0; };
+
+  let state = { g:95, i:0, score:0, hist:[], ended:false, curve:[95] };
+
+  const els = {
+    gVal: document.getElementById('gVal'),
+    gBar: document.getElementById('gBar'),
+    score: document.getElementById('score'),
+    statusTxt: document.getElementById('statusTxt'),
+    eventTitle: document.getElementById('eventTitle'),
+    eventTag: document.getElementById('eventTag'),
+    eventPrompt: document.getElementById('eventPrompt'),
+    choices: document.getElementById('choices'),
+    restart: document.getElementById('restart'),
+    chart: document.getElementById('chart')
+  };
+
+  function statusOf(g){
+    if(g < range.low) return ['Low (Hypo)','status-bad'];
+    if(g > range.high) return ['High (Hyper)','status-bad'];
+    if(g >= range.idealLow && g <= range.idealHigh) return ['Ideal','status-ok'];
+    return ['OK','status-warn'];
+  }
+
+  function updateHUD(){
+    els.gVal.textContent = state.g;
+    const pct = clamp(((state.g-40)/(300-40))*100,0,100);
+    els.gBar.style.width = pct + '%';
+    els.score.textContent = state.score;
+    const [txt, cls] = statusOf(state.g);
+    els.statusTxt.className = cls; els.statusTxt.textContent = txt;
+    drawChart();
+  }
+
+  function drawChart(){
+    const ctx = els.chart.getContext('2d');
+    const w = els.chart.width, h = els.chart.height;
+    ctx.clearRect(0,0,w,h);
+    // grid
+    ctx.strokeStyle = '#e5e7eb'; ctx.lineWidth = 1;
+    for(let y of [70,80,140,180]){ const py = mapY(y,h); ctx.beginPath(); ctx.moveTo(0,py); ctx.lineTo(w,py); ctx.stroke(); }
+    // shade ideal
+    ctx.fillStyle = 'rgba(34,197,94,0.08)';
+    ctx.fillRect(0, mapY(140,h), w, mapY(80,h)-mapY(140,h));
+    // line
+    const data = state.curve;
+    if(data.length<2) return;
+    ctx.strokeStyle = '#22c55e'; ctx.lineWidth = 2;
+    ctx.beginPath();
+    data.forEach((g,i)=>{
+      const x = mapX(i, data.length, w);
+      const y = mapY(g,h);
+      if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    });
+    ctx.stroke();
+    // points
+    ctx.fillStyle = '#0f172a';
+    data.forEach((g,i)=>{
+      const x = mapX(i, data.length, w); const y = mapY(g,h);
+      ctx.beginPath(); ctx.arc(x,y,2.5,0,Math.PI*2); ctx.fill();
+    });
+  }
+
+  function mapX(i,len,w){ const pad=10; return pad + (w-2*pad) * (i/(len-1 || 1)); }
+  function mapY(g,h){ const min=40, max=300, pad=8; const t=(g-min)/(max-min); return h - (pad + (h-2*pad)*t); }
+
+  function renderEvent(idx){
+    const ev = events[idx];
+    if(!ev){ return renderEnd(); }
+    els.eventTitle.textContent = ev.title;
+    els.eventTag.textContent = ev.tag;
+    els.eventPrompt.textContent = ev.prompt;
+    els.choices.innerHTML = '';
+    ev.choices.forEach((c)=>{
+      const b = document.createElement('button');
+      b.className='choice';
+      const img = document.createElement('div'); img.className='food';
+      img.innerHTML = (c.icons||[c.icon]).map(k=>ICONS[k]).join('');
+      const right = document.createElement('div');
+      right.innerHTML = `<div style="font-weight:700">${c.label}</div>
+        <div class="mini" style="margin-top:4px">${c.note}</div>
+        <div class="mini" style="margin-top:6px;display:flex;gap:10px;flex-wrap:wrap">
+          <span>ΔG: ${c.deltaGlucose} mg/dL</span>
+          <span>Insulin demand: ${c.insulinDemand}</span>
+        </div>`;
+      b.appendChild(img); b.appendChild(right);
+      b.addEventListener('click',()=>choose(ev,c));
+      els.choices.appendChild(b);
+    });
+  }
+
+  function choose(ev, choice){
+    let g2 = state.g + choice.deltaGlucose;
+    const auto = pancreas(g2);
+    g2 += auto;
+    g2 = clamp(Math.round(g2),40,300);
+    const demandScore = clamp(20 - (choice.insulinDemand||0),0,20);
+    const inIdeal = (g2>=range.idealLow && g2<=range.idealHigh) ? 15 : (g2>=range.low && g2<=range.high ? 8 : 0);
+    const deltaScore = demandScore + inIdeal;
+    state.score += deltaScore;
+    state.hist.push({title:ev.title, choice:choice.label, note:choice.note, before:state.g, after:g2, auto:Math.round(auto)});
+    state.g = g2; state.i++;
+    state.curve.push(g2);
+    updateHUD();
+    if(state.i >= events.length){ state.ended=true; renderEnd(); } else { renderEvent(state.i); }
+  }
+
+  function renderEnd(){
+    els.eventTitle.textContent = 'Day Complete';
+    els.eventTag.textContent = 'Summary';
+    els.eventPrompt.innerHTML = `Your final glucose is <b>${state.g} mg/dL</b>. Total score: <b>${state.score}</b>.`;
+    els.choices.innerHTML = '';
+    const wrap = document.createElement('div');
+    wrap.className = 'hist';
+    state.hist.forEach(h=>{
+      const d=document.createElement('div');
+      d.className='hitem';
+      d.innerHTML = `<div style="font-weight:700">${h.title}</div>
+      <div>Choice: ${h.choice}</div>
+      <div>Before: ${h.before} → After: ${h.after} mg/dL (auto: ${h.auto})</div>
+      <div>Note: ${h.note}</div>`;
+      wrap.appendChild(d);
+    });
+    els.choices.appendChild(wrap);
+    const again=document.createElement('button');
+    again.className='btn';
+    again.textContent='Play again';
+    again.style.marginTop='8px';
+    again.addEventListener('click', reset);
+    els.choices.appendChild(again);
+  }
+
+  function reset(){
+    state = { g:95, i:0, score:0, hist:[], ended:false, curve:[95] };
+    updateHUD();
+    renderEvent(0);
+  }
+
+  els.restart.addEventListener('click', reset);
+  reset();
+})();
+</script>
+</body>
+</html>
