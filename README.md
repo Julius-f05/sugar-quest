@@ -10,9 +10,8 @@ and learn the science of healthy balance through fun, interactive decisions.
 
 ## 🎮 How to Play
 1. Open the game in your browser.
-2. Choose your character.
-3. Make choices for meals, activities, and lifestyle.
-4. Watch how each choice impacts your blood glucose on the real-time graph.
+2. Make choices for meals, activities, and lifestyle.
+3. Watch how each choice impacts your blood glucose on the real-time graph.
 
 ---
 
